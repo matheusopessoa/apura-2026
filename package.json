@@ -8,7 +8,9 @@
   "engines": { "node": ">=18" },
   "repository": { "type": "git", "url": "git+https://github.com/matheusopessoa/apura-2026.git" },
   "scripts": {
-    "start": "node server.js",
+    "free-port": "lsof -ti tcp:${PORT:-3000} | xargs kill -9 2>/dev/null; true",
+    "start": "pnpm run free-port && node server.js",
+    "start:only": "node server.js",
     "geo": "node scripts/gerar-geo.mjs"
   }
 }
