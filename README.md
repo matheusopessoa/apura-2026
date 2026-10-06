@@ -2,7 +2,9 @@
 
 Central de apuração da eleição presidencial de 2026 (e de Governador de Pernambuco), com **mapa 3D por município**, **projeção do resultado final** enquanto as urnas ainda estão sendo apuradas e **histórico gravado minuto a minuto**.
 
-> Projeto **de código aberto**, *vibe-codado* rapidamente em cima do boilerplate **prixfy-bedrock**, durante a apuração do 1º turno. Feito para acompanhar a noite da eleição com mais contexto do que os números crus.
+> Projeto **de código aberto**, *vibe-codado* rapidamente em cima do boilerplate **[prixfy-bedrock](https://github.com/matheusopessoa/prixfy-bedrock)**, durante a apuração do 1º turno. Feito para acompanhar a noite da eleição com mais contexto do que os números crus.
+>
+> 🚀 Quer fazer um projeto como este rapidamente? Use o boilerplate **[prixfy-bedrock](https://github.com/matheusopessoa/prixfy-bedrock)**.
 
 Os dados vêm da API pública de resultados do TSE (`resultados.tse.jus.br`). **Este não é um produto oficial do TSE.** Projeções e cenários são estimativas, não previsões oficiais.
 
