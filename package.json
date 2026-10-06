@@ -1,0 +1,14 @@
+{
+  "name": "apura-2026",
+  "version": "1.0.0",
+  "description": "Painel de apuração das eleições 2026 com mapa 3D por município, projeção e histórico",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "repository": { "type": "git", "url": "git+https://github.com/matheusopessoa/apura-2026.git" },
+  "scripts": {
+    "start": "node server.js",
+    "geo": "node scripts/gerar-geo.mjs"
+  }
+}

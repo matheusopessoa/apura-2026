@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Painel Eleições Presidente 2026</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
+  <script type="importmap">
+    { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+    } }
+  </script>
+</head>
+<body class="central">
+  <header class="cab">
+    <div class="marca">
+      <svg class="marca-ico" viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="5"/><path d="M9 16.5l4.8 4.8L23.5 11"/></svg>
+      <div><b>Eleição presidencial</b><small>Apuração em tempo real · <span id="turno-rotulo">1º turno</span></small></div>
+    </div>
+    <nav class="paginas"><a href="/presidente" aria-current="page">Presidente</a><a href="/gov-pe">Governador PE</a><a href="/historico.html">Histórico</a></nav>
+    <div class="controles">
+      <span id="modo" class="badge"></span>
+      <button id="btn-atualizar" class="btn" type="button">↻ Atualizar</button>
+      <span id="atualizado" class="muted"></span>
+    </div>
+    <div class="ano"><span class="faixa" aria-hidden="true"><i></i><i></i><i></i></span>Brasil <b>2026</b></div>
+  </header>
+
+  <main>
+    <div id="alerta" class="alerta" role="status"></div>
+
+    <section class="placar" id="placar" aria-label="Resultado nacional"></section>
+
+    <section class="palco" aria-label="Mapa 3D por município">
+      <div class="mapa3d" id="mapa3d">
+        <div class="mapa-status" id="mapa-status">Carregando mapa municipal…</div>
+        <div class="bussola" aria-hidden="true"><svg id="bussola" viewBox="-30 -30 60 60"><circle r="17"/><path class="n" d="M0,-22 L4,0 L0,3 L-4,0Z"/><path d="M0,22 L4,0 L0,-3 L-4,0Z"/><path d="M-22,0 L0,-3 L3,0 L0,3Z M22,0 L0,-3 L-3,0 L0,3Z" opacity=".55"/><text y="-24">N</text></svg></div>
+        <p class="dica">Arraste para girar · ⌘/Ctrl + rolagem ou pinça para aproximar · clique num município para ver o estado</p>
+        <button class="btn-brasil" id="btn-brasil" type="button" data-foco="brasil" hidden>← Brasil</button>
+      </div>
+      <aside class="foco" id="foco" aria-live="polite" hidden></aside>
+      <div class="tip" id="tip" role="tooltip"></div>
+    </section>
+
+    <section class="leitura">
+      <div class="painel">
+        <h2>Como ler o mapa?</h2>
+        <div class="como" id="leg-como"></div>
+      </div>
+      <div class="painel">
+        <h2>Quanto já foi apurado? <span>altura · por município</span></h2>
+        <div class="degraus" id="leg-alt"></div>
+      </div>
+      <div class="painel">
+        <h2>Quem está na frente? <span>cor · por município</span></h2>
+        <div class="lideres" id="leg-cor"></div>
+      </div>
+    </section>
+
+    <section class="kpis" id="kpis"></section>
+
+    <nav class="escopo" id="escopo" aria-label="Escolher região"></nav>
+
+    <section class="card">
+      <h2 id="proj-titulo"></h2>
+      <p id="proj-veredito" class="veredito"></p>
+      <div class="proj-grade">
+        <div class="tabela-wrap"><table id="proj-cands"></table></div>
+        <div class="tabela-wrap"><table id="proj-regioes"></table></div>
+      </div>
+      <p class="muted">Estimativa: cada estado é levado a 100% do seu eleitorado (votos válidos por eleitor nas urnas já apuradas × eleitorado total do estado), mantendo os percentuais atuais dele, e os totais são recalculados pelo peso de cada estado. Não é previsão oficial — as urnas costumam chegar em ordem enviesada (ex.: interior antes das capitais), então o resultado pode mudar bastante, sobretudo com pouca apuração.</p>
+    </section>
+
+    <section class="card">
+      <h2>Votos que faltam apurar e cenário: Lula melhora nos votos restantes</h2>
+      <div class="cenario-ctrl">
+        <label>Se Lula lidera a região: sobe <input id="cen-pp" type="number" min="0" max="100" step="1" value="35"> p.p. nos votos que faltam</label>
+        <label>Se outro candidato lidera: Lula melhora <input id="cen-rel" type="number" min="0" max="500" step="1" value="20"> % (relativo) nos votos que faltam</label>
+      </div>
+      <p id="cen-veredito" class="veredito"></p>
+      <div class="tabela-wrap"><table id="cen-regioes"></table></div>
+      <h3 class="h3">Efeito no total do Brasil</h3>
+      <div class="tabela-wrap"><table id="cen-nacional"></table></div>
+      <p class="muted">Votos que faltam = votos válidos da projeção (100% apurado) menos os já apurados, por região. Exemplo com os padrões: Lula tem 40% no Nordeste e lidera → nos votos que faltam ele terá 75%; sem liderar, de 30% vai para 36% (30 × 1,20). O que Lula ganha é tirado dos demais candidatos na proporção do que cada um tem hoje na região. É um cenário hipotético, não uma previsão.</p>
+    </section>
+
+    <section class="card" id="sec-2t">
+      <h2>Projeção do 2º turno · Lula × Flávio Bolsonaro</h2>
+      <p class="muted">Eleitores de Lula e Flávio repetem o voto. Os da terceira via se dividem conforme as taxas abaixo (Quaest, 03/10/2026 — editáveis); o que sobra vai para branco, nulo ou indeciso.</p>
+      <div class="tabela-wrap"><table id="st-params"></table></div>
+      <label class="st-base">Base do 1º turno:
+        <select id="st-base"><option value="proj">Projeção com 100% apurado</option><option value="hoje">Apurado até agora</option></select>
+      </label>
+      <div class="cenario-bloco">
+        <h3 class="h3">🎯 Cenário realista <span class="muted">· usa as taxas acima</span></h3>
+        <p id="st-veredito" class="veredito"></p>
+      <h4 class="h4">Para onde vão os eleitores de cada candidato do 1º turno (2º turno)</h4>
+      <div class="tabela-wrap"><table id="st-dist"></table></div>
+      <div class="chart-grid">
+        <div class="chart-box alto"><canvas id="chart-st"></canvas></div>
+        <figure class="pizzas" style="display:block;margin:0"><div class="pizza-box"><canvas id="pizza-st"></canvas></div><div class="legenda" id="pizza-st-l"></div></figure>
+      </div>
+      <h4 class="h4">Por região</h4>
+      <div class="tabela-wrap"><table id="st-regioes"></table></div>
+      <h4 class="h4">Por estado</h4>
+      <div class="tabela-wrap" style="max-height: 420px; overflow-y: auto"><table id="st-ufs"></table></div>
+      </div>
+
+      <div class="cenario-bloco pess">
+        <h3 class="h3">⚠️ Cenário pessimista <span class="muted">· calculado em cima do realista</span></h3>
+        <div class="cenario-ctrl">
+          <label>Lula recebe <input id="stc-pct" type="number" min="0" max="300" step="1" value="33"> % a mais de cada eleitor da terceira via</label>
+          <label>votos extras vindos de <select id="stc-fonte"><option value="flavio">Flávio</option><option value="sem">Brancos/nulos/indecisos</option></select></label>
+        </div>
+        <p id="stc-veredito" class="veredito"></p>
+      <h4 class="h4">Para onde vão os eleitores de cada candidato do 1º turno (2º turno)</h4>
+      <div class="tabela-wrap"><table id="stc-dist"></table></div>
+      <div class="chart-grid">
+        <div class="chart-box alto"><canvas id="chart-stc"></canvas></div>
+        <figure class="pizzas" style="display:block;margin:0"><div class="pizza-box"><canvas id="pizza-stc"></canvas></div><div class="legenda" id="pizza-stc-l"></div></figure>
+      </div>
+      <h4 class="h4">Por região</h4>
+      <div class="tabela-wrap"><table id="stc-regioes"></table></div>
+      <h4 class="h4">Por estado</h4>
+      <div class="tabela-wrap" style="max-height: 420px; overflow-y: auto"><table id="stc-ufs"></table></div>
+      </div>
+      <p class="muted">Cada região/estado usa o seu próprio 1º turno (do Brasil inteiro, na soma). Não considera diferença de abstenção entre turnos nem mudança de voto de eleitores de Lula/Flávio. Percentuais sobre votos válidos (Lula + Flávio). “Demais candidatos” (Zema e nanicos) começam em 0%/0% por falta de dado — ajuste se quiser.</p>
+    </section>
+
+    <section class="card">
+      <h2>Gráficos de pizza <span class="muted">· acompanham a região/estado selecionado (eleitorado é sempre do Brasil)</span></h2>
+      <div class="pizzas">
+        <figure><figcaption id="pizza-real-t"></figcaption><div class="pizza-box"><canvas id="pizza-real"></canvas></div><div class="legenda" id="pizza-real-l"></div></figure>
+        <figure><figcaption id="pizza-proj-t"></figcaption><div class="pizza-box"><canvas id="pizza-proj"></canvas></div><div class="legenda" id="pizza-proj-l"></div></figure>
+        <figure><figcaption id="pizza-eleit-t"></figcaption><div class="pizza-box"><canvas id="pizza-eleit"></canvas></div><div class="legenda" id="pizza-eleit-l"></div></figure>
+      </div>
+    </section>
+
+    <section class="grade">
+      <div class="card">
+        <h2>Apuração por região</h2>
+        <div class="regioes" id="regioes"></div>
+      </div>
+
+      <div class="card destaque">
+        <h2 id="det-titulo"></h2>
+        <div class="det-meta" id="det-meta"></div>
+        <div class="chart-box detalhe"><canvas id="chart-sel"></canvas></div>
+        <ul class="cands" id="det-cands"></ul>
+      </div>
+
+      <div class="card largo">
+        <h2>Comparativo entre regiões <span class="muted">· % dos votos válidos</span></h2>
+        <div class="chart-box alto"><canvas id="chart-reg"></canvas></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 id="tab-titulo">Estados</h2>
+      <div class="tabela-wrap"><table id="tabela"></table></div>
+    </section>
+
+    <p class="rodape" id="rodape"></p>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+# Sistema
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Editores
+.vscode/
+.idea/
+
+# Node
+node_modules/
+npm-debug.log*
+*.log
+
+# Ambiente
+.env
+.env.*
+
+# Claude / ferramentas locais
+.claude/
+graphify-out/
+
+# Dados: o histórico do 1º turno e o cache municipal são versionados de propósito
+# (a calibração do 2º turno depende deles). Arquivos temporários não:
+data/*.tmp

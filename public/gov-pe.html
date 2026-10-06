@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Governador de Pernambuco 2026</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="topo">
+    <div>
+      <nav class="paginas"><a href="/presidente">Presidente</a><a href="/gov-pe" aria-current="page">Governador PE</a></nav>
+      <h1>Governador · Pernambuco</h1>
+      <p class="sub">1º turno 2026 · apuração por município</p>
+    </div>
+    <div class="controles">
+      <span id="modo" class="badge"></span>
+      <button id="btn-atualizar" class="btn" type="button">↻ Atualizar agora</button>
+      <span id="atualizado" class="muted"></span>
+    </div>
+  </header>
+
+  <main>
+    <div id="alerta" class="alerta" role="status"></div>
+
+    <section class="kpis" id="kpis"></section>
+
+    <section class="card">
+      <h2>Projeção · Pernambuco com 100% apurado</h2>
+      <p id="veredito" class="veredito"></p>
+      <div class="proj-grade">
+        <div class="tabela-wrap"><table id="t-cands"></table></div>
+        <div class="chart-box"><canvas id="chart-cands"></canvas></div>
+      </div>
+      <p class="muted" id="nota"></p>
+    </section>
+
+    <section class="card">
+      <h2>Gráficos de pizza</h2>
+      <div class="pizzas">
+        <figure><figcaption>Votos válidos hoje</figcaption><div class="pizza-box"><canvas id="pizza-real"></canvas></div><div class="legenda" id="pizza-real-l"></div></figure>
+        <figure><figcaption>Projeção com 100% apurado</figcaption><div class="pizza-box"><canvas id="pizza-proj"></canvas></div><div class="legenda" id="pizza-proj-l"></div></figure>
+        <figure><figcaption id="pizza-eleit-t">Eleitorado</figcaption><div class="pizza-box"><canvas id="pizza-eleit"></canvas></div><div class="legenda" id="pizza-eleit-l"></div></figure>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 id="tab-titulo">Municípios</h2>
+      <input id="filtro" class="filtro" type="search" placeholder="Buscar município…" aria-label="Buscar município">
+      <div class="tabela-wrap" style="max-height: 560px; overflow-y: auto"><table id="tabela"></table></div>
+    </section>
+
+    <p class="rodape">Fonte: resultados.tse.jus.br (1º turno 2026, Governador de PE). Atualiza a cada 60 s. Percentuais sobre votos válidos; % de apuração = seções totalizadas ÷ total de seções.</p>
+  </main>
+
+  <script type="module" src="gov-pe.js"></script>
+</body>
+</html>
