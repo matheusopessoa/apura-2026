@@ -51,7 +51,7 @@ async function getJson(origem, path, eleicao = TSE.eleicao) {
   return r.json();
 }
 
-/** Lê o acompanhamento (seções + eleitorado) e os votos de cada UF. */
+/** Lê o acompanhamento (seções, eleitorado, comparecimento e abstenção das seções apuradas) e os votos de cada UF. */
 /** `origem`: '/tse' (proxy local, no navegador) ou a URL oficial (no servidor). */
 /** `eleicao`: código da eleição no TSE (TURNOS[1] ou TURNOS[2]). */
 export async function carregarTSE(origem = '/tse', eleicao = TSE.eleicao) {
@@ -72,7 +72,8 @@ export async function carregarTSE(origem = '/tse', eleicao = TSE.eleicao) {
       for (const par of agr.par ?? [])
         for (const c of par.cand ?? []) if (c.n in votos) votos[c.n] += num(c.vap);
     const ts = num(abr.s.ts), st = num(abr.s.st);
-    return { ...e, eleitorado: num(abr.e.te), eleitoradoApurado: num(abr.e.est), secoes: { total: ts, apuradas: st }, apuracao: ts ? (st / ts) * 100 : 0, votos };
+    return { ...e, eleitorado: num(abr.e.te), eleitoradoApurado: num(abr.e.est), comparecimento: num(abr.e.c), abstencao: num(abr.e.a),
+      secoes: { total: ts, apuradas: st }, apuracao: ts ? (st / ts) * 100 : 0, votos };
   });
   return { estados, atualizadoTSE: `${ab.dg} ${ab.hg}` };
 }

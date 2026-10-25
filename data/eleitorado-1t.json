@@ -1,0 +1,145 @@
+{
+ "fonte": "resultados.tse.jus.br · 1º turno 2026 · arquivo 05/10/2026 12:51:41",
+ "ufs": {
+  "AC": {
+   "eleitorado": 613742,
+   "comparecimento": 488330,
+   "abstencao": 125412
+  },
+  "AL": {
+   "eleitorado": 2442126,
+   "comparecimento": 1938428,
+   "abstencao": 503698
+  },
+  "AM": {
+   "eleitorado": 2798611,
+   "comparecimento": 2234549,
+   "abstencao": 564062
+  },
+  "AP": {
+   "eleitorado": 576988,
+   "comparecimento": 476562,
+   "abstencao": 100426
+  },
+  "BA": {
+   "eleitorado": 11312752,
+   "comparecimento": 9053601,
+   "abstencao": 2259151
+  },
+  "CE": {
+   "eleitorado": 6996545,
+   "comparecimento": 5910471,
+   "abstencao": 1086074
+  },
+  "DF": {
+   "eleitorado": 2258320,
+   "comparecimento": 1831396,
+   "abstencao": 426924
+  },
+  "ES": {
+   "eleitorado": 2991650,
+   "comparecimento": 2352282,
+   "abstencao": 639368
+  },
+  "GO": {
+   "eleitorado": 5080590,
+   "comparecimento": 3971587,
+   "abstencao": 1109003
+  },
+  "MA": {
+   "eleitorado": 5183115,
+   "comparecimento": 4160343,
+   "abstencao": 1022772
+  },
+  "MG": {
+   "eleitorado": 16372372,
+   "comparecimento": 12637274,
+   "abstencao": 3735098
+  },
+  "MS": {
+   "eleitorado": 2024430,
+   "comparecimento": 1541220,
+   "abstencao": 483210
+  },
+  "MT": {
+   "eleitorado": 2637801,
+   "comparecimento": 2052133,
+   "abstencao": 585668
+  },
+  "PA": {
+   "eleitorado": 6262397,
+   "comparecimento": 5066504,
+   "abstencao": 1195893
+  },
+  "PB": {
+   "eleitorado": 3248531,
+   "comparecimento": 2683988,
+   "abstencao": 564543
+  },
+  "PE": {
+   "eleitorado": 7223450,
+   "comparecimento": 5911062,
+   "abstencao": 1312388
+  },
+  "PI": {
+   "eleitorado": 2704758,
+   "comparecimento": 2240883,
+   "abstencao": 463875
+  },
+  "PR": {
+   "eleitorado": 8613657,
+   "comparecimento": 6841457,
+   "abstencao": 1772200
+  },
+  "RJ": {
+   "eleitorado": 12857648,
+   "comparecimento": 9859802,
+   "abstencao": 2997846
+  },
+  "RN": {
+   "eleitorado": 2659825,
+   "comparecimento": 2171013,
+   "abstencao": 488812
+  },
+  "RO": {
+   "eleitorado": 1265893,
+   "comparecimento": 991080,
+   "abstencao": 274813
+  },
+  "RR": {
+   "eleitorado": 401521,
+   "comparecimento": 332772,
+   "abstencao": 68749
+  },
+  "RS": {
+   "eleitorado": 8522545,
+   "comparecimento": 6702903,
+   "abstencao": 1819642
+  },
+  "SC": {
+   "eleitorado": 5734651,
+   "comparecimento": 4648159,
+   "abstencao": 1086492
+  },
+  "SE": {
+   "eleitorado": 1740135,
+   "comparecimento": 1439082,
+   "abstencao": 301053
+  },
+  "SP": {
+   "eleitorado": 34122892,
+   "comparecimento": 26431992,
+   "abstencao": 7690900
+  },
+  "TO": {
+   "eleitorado": 1182023,
+   "comparecimento": 965196,
+   "abstencao": 216827
+  },
+  "ZZ": {
+   "eleitorado": 916534,
+   "comparecimento": 341766,
+   "abstencao": 574345
+  }
+ }
+}

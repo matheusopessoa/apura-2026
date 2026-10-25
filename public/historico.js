@@ -111,7 +111,7 @@ async function mostrarCalibracao() {
   const nomeUf = Object.fromEntries((await import('./data.js')).ESTADOS.map((e) => [e.uf, e.nome]));
   const linhas = Object.entries(cal.ufs).sort(([a], [b]) => nomeUf[a].localeCompare(nomeUf[b]));
   $('t-cal').innerHTML = `<thead><tr><th>Estado</th>${niveis.map((n) => `<th>com ${n}% apurado</th>`).join('')}</tr></thead><tbody>${linhas.map(([uf, c]) => `<tr><td>${nomeUf[uf]}</td>${niveis.map((n) => {
-    const v = ajusteUF(c, n), fora = n < c[0][0];
+    const v = ajusteUF(c, n), fora = n < (cal.inicio?.[uf] ?? c[0][0]);
     return `<td style="color:${v > 0.05 ? lula.cor : v < -0.05 ? flavio.cor : 'inherit'}">${fora ? `<i>${pp(v)}</i>` : pp(v)}</td>`;
   }).join('')}</tr>`).join('')}</tbody>`;
 }

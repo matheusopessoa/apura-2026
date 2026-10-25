@@ -17,10 +17,13 @@ export function agregar(lista, cands = CANDIDATOS) {
 
 // Projeção: leva cada unidade (estado/município) a 100%, mantendo os percentuais que ela tem hoje.
 // Peso = eleitorado: votos válidos por eleitor nas urnas já apuradas × eleitorado total da unidade.
+// Comparecimento e abstenção (quando a unidade os tem) são levados a 100% pelo mesmo fator.
 // (Sem o eleitorado apurado, ex.: snapshots antigos, usa a proporção de seções.)
 export const projetar = (e) => {
   const f = e.eleitoradoApurado > 0 ? e.eleitorado / e.eleitoradoApurado : e.apuracao > 0 ? 100 / e.apuracao : 0;
+  const esc = (v) => (Number.isFinite(v) ? Math.round(v * f) : v);
   return { ...e, apuracao: 100, eleitoradoApurado: e.eleitorado, secoes: { ...e.secoes, apuradas: e.secoes.total },
+    comparecimento: esc(e.comparecimento), abstencao: esc(e.abstencao),
     votos: Object.fromEntries(Object.entries(e.votos).map(([k, v]) => [k, Math.round(v * f)])) };
 };
 

@@ -1,6 +1,7 @@
 import { CANDIDATOS, REGIOES, ESTADOS, carregarTSE } from './data.js';
 import { agregar, projetar, fmtInt, fmtPct, situacao as calcSituacao, alertaResultado } from './calc.js';
-import { projetarCalibrado } from './calibracao.js';
+import { estimar, previaDe, pesoApuracao, comparar1T, APURACAO_PLENA, LULA, FLAVIO } from './calibracao.js';
+import { GRUPOS, NOVOS, FONTES, normalizar, queryDeParams, votosSegundoTurno } from './transferencia.js';
 import { criarMapa3D, alturaDe, ALT_MAX } from './mapa3d.js';
 
 const $ = (id) => document.getElementById(id);
@@ -9,8 +10,8 @@ const cand = Object.fromEntries(CANDIDATOS.map((c) => [c.id, c]));
 
 // turno em andamento (o servidor troca sozinho para o 2º quando o TSE começa a totalizá-lo)
 const TURNO = await fetch('/api/turno', { cache: 'no-store' }).then((r) => r.json()).catch(() => ({ turno: 1, eleicao: '6257' }));
-// curvas aprendidas com o 1º turno encerrado; usadas para calibrar a projeção do 2º turno
-const CAL = TURNO.turno === 2 ? await fetch('/api/calibracao').then((r) => (r.ok ? r.json() : null)).catch(() => null) : null;
+// estimativa do 2º turno: prévia (1º turno + pesquisas) e curvas aprendidas com o 1º turno encerrado (calibracao.js)
+let CAL = TURNO.turno === 2 ? await fetch('/api/calibracao').then((r) => (r.ok ? r.json() : null)).catch(() => null) : null;
 
 const state = {
   escopo: { tipo: 'br', id: 'BR' },
@@ -192,7 +193,6 @@ function renderPizzas() {
 }
 
 // ---------- cenário: Lula melhora nos votos que faltam ----------
-const LULA = CANDIDATOS.find((c) => c.numero === 13).id;
 const lerNum = (id, padrao) => { const v = parseFloat($(id).value); return Number.isFinite(v) ? Math.max(0, v) : padrao; };
 
 function renderCenario() {
@@ -244,52 +244,62 @@ function renderCenario() {
     : `Neste cenário haveria <b>2º turno</b>: <b style="color:${l1.cor}">${l1.nome}</b> ${fmtPct(pct(tot, sC, l1))} × <b style="color:${l2.cor}">${l2.nome}</b> ${fmtPct(pct(tot, sC, l2))}.`;
 }
 
-// ---------- 2º turno: Lula × Flávio ----------
-const FLAVIO = CANDIDATOS.find((c) => c.numero === 22).id;
-const ST_GRUPOS = [  // ids do 1º turno, % que vai para Flávio / Lula (Quaest)
-  { chave: 'renan', nome: 'Renan Santos', ids: ['14'], f: 60, l: 11 },
-  { chave: 'caiado', nome: 'Ronaldo Caiado', ids: ['55'], f: 43, l: 19 },
-  { chave: 'cury', nome: 'Augusto Cury', ids: ['70'], f: 34, l: 23 },
-  { chave: 'demais', nome: 'Demais candidatos', ids: CANDIDATOS.filter((c) => !['13', '22', '14', '55', '70'].includes(c.id)).map((c) => c.id), f: 0, l: 0 },
-];
-const cLula = CANDIDATOS.find((c) => c.id === LULA), cFlavio = CANDIDATOS.find((c) => c.id === FLAVIO);
+// ---------- 2º turno: Lula × Flávio (transferência de votos do 1º turno; taxas em transferencia.js) ----------
+const cLula = cand[LULA], cFlavio = cand[FLAVIO];
+const LINHAS_PARAMS = [...GRUPOS, NOVOS];
+const ppf2 = (d) => `${d >= 0 ? '+' : ''}${d.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} p.p.`;
 
 function initSegundoTurno() {
-  $('st-params').innerHTML = `<thead><tr><th>Eleitor do 1º turno de…</th><th>Votos no 1º turno</th><th>→ Flávio (%)</th><th>→ Lula (%)</th><th>→ Branco/nulo/indeciso</th></tr></thead><tbody>${ST_GRUPOS.map((g) => `
-    <tr><td>${g.nome}</td><td id="st-n-${g.chave}">—</td><td><input id="st-f-${g.chave}" type="number" min="0" max="100" value="${g.f}"></td>
-    <td><input id="st-l-${g.chave}" type="number" min="0" max="100" value="${g.l}"></td><td id="st-s-${g.chave}">—</td></tr>`).join('')}</tbody>`;
-  for (const el of document.querySelectorAll('#st-params input, #st-base, #stc-pct, #stc-fonte')) el.addEventListener('input', () => state.estados.length && renderSegundoTurno());
+  $('st-params').innerHTML = `<thead><tr><th>Eleitor do 1º turno de…</th><th>Eleitores no 1º turno</th><th style="color:${cFlavio.cor}">→ Flávio (%)</th><th style="color:${cLula.cor}">→ Lula (%)</th><th>→ Branco/nulo/indeciso</th></tr></thead><tbody>${LINHAS_PARAMS.map((g) => `
+    <tr><td>${g.nome}${g.chave === 'novos' ? `<br><span class="muted"><input id="st-c-novos" type="number" min="0" max="100" step="1" value="${NOVOS.comparecem}"> % deles votam no 2º turno</span>` : ''}</td>
+    <td id="st-n-${g.chave}">—</td><td><input id="st-f-${g.chave}" type="number" min="0" max="100" step="0.1" value="${g.f}"></td>
+    <td><input id="st-l-${g.chave}" type="number" min="0" max="100" step="0.1" value="${g.l}"></td><td id="st-s-${g.chave}">—</td></tr>`).join('')}</tbody>`;
+  for (const el of document.querySelectorAll('#st-params input, #st-base, #stc-pct, #stc-fonte')) el.addEventListener('input', aoEditarST);
 }
 
+/** Taxas digitadas no painel, no formato de transferencia.js (f + l ≤ 100 em cada linha). */
 function paramsST() {
-  return ST_GRUPOS.map((g) => {
-    let f = Math.max(0, parseFloat($(`st-f-${g.chave}`).value) || 0), l = Math.max(0, parseFloat($(`st-l-${g.chave}`).value) || 0);
-    const excede = f + l > 100;
-    if (excede) { const k = 100 / (f + l); f *= k; l *= k; }
-    return { ...g, f: f / 100, l: l / 100, excede };
-  });
+  const p = Object.fromEntries(LINHAS_PARAMS.map((g) => [g.chave, { f: $(`st-f-${g.chave}`).value, l: $(`st-l-${g.chave}`).value }]));
+  p.novos.comparecem = $('st-c-novos').value;
+  return normalizar(p);
+}
+
+let timerST = null;
+function aoEditarST() {
+  if (TURNO.turno === 1) { if (state.estados.length) renderSegundoTurno(); return; }
+  // 2º turno: as curvas de correção dependem das taxas → o servidor recalcula (barato) e o painel inteiro é redesenhado
+  clearTimeout(timerST);
+  timerST = setTimeout(async () => {
+    try {
+      const r = await fetch(`/api/calibracao?${queryDeParams(paramsST())}`, { cache: 'no-store' });
+      if (r.ok) { CAL = await r.json(); if (state.estados.length) render(); }
+    } catch (err) { console.error('Falha ao recalcular a estimativa:', err); }
+  }, 350);
+}
+
+/** Preenche as colunas "eleitores no 1º turno" e "branco/nulo" da tabela de taxas. `agg` = { votos, abstencao } do 1º turno. */
+function preencherParamsST(params, agg) {
+  for (const g of LINHAS_PARAMS) {
+    const q = params[g.chave];
+    const n = g.chave === 'novos' ? ((agg.abstencao || 0) * q.comparecem) / 100 : g.ids.reduce((s, id) => s + (agg.votos[id] || 0), 0);
+    $(`st-n-${g.chave}`).innerHTML = g.chave === 'novos' ? `${fmtInt.format(Math.round(n))} <span class="muted">de ${fmtInt.format(Math.round(agg.abstencao || 0))} abstenções</span>` : fmtInt.format(Math.round(n));
+    $(`st-s-${g.chave}`).innerHTML = q.excede ? '<span class="aviso">soma > 100%: ajustado</span>' : fmtPct(Math.max(0, 100 - q.f - q.l), 1);
+  }
 }
 
 /** Cenário: Lula recebe `bonus`% a mais de cada grupo; o extra sai de Flávio (ou dos brancos/nulos), nunca além do que existe. */
 function aplicarBonus(params, bonusPct, fonte) {
-  return params.map((g) => {
+  return Object.fromEntries(Object.entries(params).map(([k, g]) => {
     const extra = g.l * (bonusPct / 100);
-    const tira = Math.min(extra, fonte === 'flavio' ? g.f : Math.max(0, 1 - g.f - g.l));
-    return { ...g, l: g.l + tira, f: fonte === 'flavio' ? g.f - tira : g.f };
-  });
+    const tira = Math.min(extra, fonte === 'flavio' ? g.f : Math.max(0, 100 - g.f - g.l));
+    return [k, { ...g, l: g.l + tira, f: fonte === 'flavio' ? g.f - tira : g.f }];
+  }));
 }
 
-/** Votos de Lula e Flávio no 2º turno para um conjunto de unidades (já na base escolhida). */
-function calcST(unidades, params) {
-  const v = agregar(unidades).votos;
-  let lula = v[LULA], flavio = v[FLAVIO], sem = 0;
-  for (const g of params) {
-    const tot = g.ids.reduce((s, id) => s + (v[id] || 0), 0);
-    flavio += tot * g.f; lula += tot * g.l; sem += tot * (1 - g.f - g.l);
-  }
-  const validos = lula + flavio;
-  return { lula, flavio, sem, validos, pLula: validos ? (lula / validos) * 100 : 0, pFlavio: validos ? (flavio / validos) * 100 : 0 };
-}
+/** Agregado do 1º turno de um conjunto de unidades: votos por candidato e abstenção. */
+const agg1 = (unidades) => ({ votos: agregar(unidades).votos, abstencao: unidades.reduce((s, e) => s + (e.abstencao || 0), 0) });
+/** Votos de Lula e Flávio no 2º turno para um conjunto de unidades do 1º turno (já na base escolhida). */
+const calcST = (unidades, params) => votosSegundoTurno(agg1(unidades), params);
 
 const chartsST = {};
 function criarChartsST(grid) {
@@ -314,7 +324,7 @@ function renderBlocoST(p, params, ufs, base, ref) {
   let comp = '';
   if (refBr) {
     const d = br.pLula - refBr.pLula;
-    comp = ` — ${vence(refBr) === w ? `${w.nome} mantém a vitória` : `<b>${w.nome} vira o resultado</b>`} (Lula ${d >= 0 ? '+' : ''}${d.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} p.p. vs. realista)`;
+    comp = ` — ${vence(refBr) === w ? `${w.nome} mantém a vitória` : `<b>${w.nome} vira o resultado</b>`} (Lula ${ppf2(d)} vs. realista)`;
   }
   $(`${p === 'st' ? 'st' : 'stc'}-veredito`).innerHTML = br.validos
     ? `<b style="color:${w.cor}">${w.nome} ${fmtPct(w === cLula ? br.pLula : br.pFlavio)}</b> × <b style="color:${perde.cor}">${perde.nome} ${fmtPct(w === cLula ? br.pFlavio : br.pLula)}</b>${comp}; vantagem de ~${fmtInt.format(Math.round(difVotos))} votos.`
@@ -324,7 +334,7 @@ function renderBlocoST(p, params, ufs, base, ref) {
   const regs = grupos.map(([n, l]) => [n, sub(l)]);
   const refRegs = ref ? ref.regs : null;
   const venc = (r) => { const x = vence(r); return r.validos ? `<td><b style="color:${x.cor}">${x.nome}</b></td><td>${fmtInt.format(Math.round(Math.abs(r.lula - r.flavio)))}</td>` : '<td>—</td><td>—</td>'; };
-  const dCol = (r, rr) => (rr ? `<td style="color:${r.pLula - rr.pLula >= 0 ? '#16a34a' : '#dc2626'}">${r.pLula - rr.pLula >= 0 ? '+' : ''}${(r.pLula - rr.pLula).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} p.p.</td>` : '');
+  const dCol = (r, rr) => (rr ? `<td style="color:${r.pLula - rr.pLula >= 0 ? '#16a34a' : '#dc2626'}">${ppf2(r.pLula - rr.pLula)}</td>` : '');
   const cab = `<th style="color:${cLula.cor}">Lula</th><th style="color:${cFlavio.cor}">Flávio</th><th>Vencedor</th><th>Vantagem (votos)</th>${ref ? '<th>Lula vs. realista</th>' : ''}<th>Votos Lula</th><th>Votos Flávio</th>`;
   $(`${p}-regioes`).innerHTML = `<thead><tr><th>Região</th>${cab}</tr></thead><tbody>${regs.map(([n, r], i) =>
     `<tr><td>${n === 'Brasil' ? '<b>Brasil</b>' : n}</td><td>${fmtPct(r.pLula)}</td><td>${fmtPct(r.pFlavio)}</td>${venc(r)}${dCol(r, refRegs?.[i][1])}<td>${fmtInt.format(Math.round(r.lula))}</td><td>${fmtInt.format(Math.round(r.flavio))}</td></tr>`).join('')}</tbody>`;
@@ -353,74 +363,117 @@ function renderBlocoST(p, params, ufs, base, ref) {
 }
 
 /** Tabela de distribuição: para onde vai cada grupo do 1º turno (percentual e votos). `ref` = taxas do realista, para mostrar a variação. */
-function renderDistribuicao(p, params, vTot, ref) {
+function renderDistribuicao(p, params, agg, ref) {
   const nf = (n) => fmtInt.format(Math.round(n));
   const dv = (n, r) => (ref && Math.abs(n - r) >= 0.5 ? ` <span style="color:${n > r ? '#16a34a' : '#dc2626'}">${n > r ? '+' : '−'}${nf(Math.abs(n - r))}</span>` : '');
-  const dp = (x, r) => (ref && Math.abs(x - r) >= 0.005 ? ` <span class="muted">(realista ${fmtPct(r * 100, 1)})</span>` : '');
+  const dp = (x, r) => (ref && Math.abs(x - r) >= 0.5 ? ` <span class="muted">(realista ${fmtPct(r, 1)})</span>` : '');
+  const totalDe = (g, q) => (g.chave === 'novos' ? ((agg.abstencao || 0) * q.comparecem) / 100 : g.ids.reduce((s, id) => s + (agg.votos[id] || 0), 0));
   const linhas = [
-    { nome: 'Eleitores de Lula (repetem o voto)', tot: vTot[LULA], f: 0, l: 1, rf: 0, rl: 1 },
-    { nome: 'Eleitores de Flávio (repetem o voto)', tot: vTot[FLAVIO], f: 1, l: 0, rf: 1, rl: 0 },
-    ...params.map((g, i) => ({ nome: g.nome, tot: g.ids.reduce((s, id) => s + (vTot[id] || 0), 0), f: g.f, l: g.l, rf: ref ? ref[i].f : g.f, rl: ref ? ref[i].l : g.l })),
+    { nome: 'Eleitores de Lula (repetem o voto)', tot: agg.votos[LULA] || 0, f: 0, l: 100, rf: 0, rl: 100 },
+    { nome: 'Eleitores de Flávio (repetem o voto)', tot: agg.votos[FLAVIO] || 0, f: 100, l: 0, rf: 100, rl: 0 },
+    ...LINHAS_PARAMS.map((g) => ({ nome: g.chave === 'novos' ? `${g.nome} (${fmtPct(params.novos.comparecem, 0)} das abstenções)` : g.nome, tot: totalDe(g, params[g.chave]),
+      f: params[g.chave].f, l: params[g.chave].l, rf: ref ? ref[g.chave].f : params[g.chave].f, rl: ref ? ref[g.chave].l : params[g.chave].l })),
   ];
-  const cel = (tot, x, rx) => `<td>${fmtPct(x * 100, 1)}${dp(x, rx)}</td><td>${nf(tot * x)}${dv(tot * x, tot * rx)}</td>`;
-  const tot = linhas.reduce((a, g) => ({ t: a.t + g.tot, f: a.f + g.tot * g.f, l: a.l + g.tot * g.l, rf: a.rf + g.tot * g.rf, rl: a.rl + g.tot * g.rl }), { t: 0, f: 0, l: 0, rf: 0, rl: 0 });
+  const cel = (tot, x, rx) => `<td>${fmtPct(x, 1)}${dp(x, rx)}</td><td>${nf((tot * x) / 100)}${dv((tot * x) / 100, (tot * rx) / 100)}</td>`;
+  const tot = linhas.reduce((a, g) => ({ t: a.t + g.tot, f: a.f + (g.tot * g.f) / 100, l: a.l + (g.tot * g.l) / 100, rf: a.rf + (g.tot * g.rf) / 100, rl: a.rl + (g.tot * g.rl) / 100 }), { t: 0, f: 0, l: 0, rf: 0, rl: 0 });
   const sem = tot.t - tot.f - tot.l, rsem = tot.t - tot.rf - tot.rl;
-  const corpo = linhas.map((g) => `<tr><td>${g.nome}</td><td>${nf(g.tot)}</td>${cel(g.tot, g.f, g.rf)}${cel(g.tot, g.l, g.rl)}${cel(g.tot, 1 - g.f - g.l, 1 - g.rf - g.rl)}</tr>`).join('');
-  const rodape = `<tr><td><b>Total do 2º turno</b></td><td><b>${nf(tot.t)}</b></td>
+  const corpo = linhas.map((g) => `<tr><td>${g.nome}</td><td>${nf(g.tot)}</td>${cel(g.tot, g.f, g.rf)}${cel(g.tot, g.l, g.rl)}${cel(g.tot, 100 - g.f - g.l, 100 - g.rf - g.rl)}</tr>`).join('');
+  const rodape = tot.t ? `<tr><td><b>Total do 2º turno</b></td><td><b>${nf(tot.t)}</b></td>
     <td><b>${fmtPct((tot.f / tot.t) * 100, 1)}</b></td><td><b>${nf(tot.f)}</b>${dv(tot.f, tot.rf)}</td>
     <td><b>${fmtPct((tot.l / tot.t) * 100, 1)}</b></td><td><b>${nf(tot.l)}</b>${dv(tot.l, tot.rl)}</td>
-    <td><b>${fmtPct((sem / tot.t) * 100, 1)}</b></td><td><b>${nf(sem)}</b>${dv(sem, rsem)}</td></tr>`;
-  $(`${p}-dist`).innerHTML = `<thead><tr><th>Origem (1º turno)</th><th>Votos</th><th style="color:${cFlavio.cor}">→ Flávio (%)</th><th style="color:${cFlavio.cor}">→ Flávio (votos)</th>
+    <td><b>${fmtPct((sem / tot.t) * 100, 1)}</b></td><td><b>${nf(sem)}</b>${dv(sem, rsem)}</td></tr>` : '';
+  $(`${p}-dist`).innerHTML = `<thead><tr><th>Origem (1º turno)</th><th>Eleitores</th><th style="color:${cFlavio.cor}">→ Flávio (%)</th><th style="color:${cFlavio.cor}">→ Flávio (votos)</th>
     <th style="color:${cLula.cor}">→ Lula (%)</th><th style="color:${cLula.cor}">→ Lula (votos)</th><th>→ Branco/nulo/indeciso (%)</th><th>→ Branco/nulo/indeciso (votos)</th></tr></thead><tbody>${corpo}</tbody><tfoot>${rodape}</tfoot>`;
 }
 
+/** Durante o 1º turno: projeção do 2º a partir da apuração atual (ou da projeção a 100%). */
 function renderSegundoTurno() {
   const params = paramsST();
   const base = $('st-base').value === 'hoje' ? (e) => e : projetar;
   const ufs = state.estados.map(base);
-  const vTot = agregar(ufs).votos;
-  for (const g of params) {
-    $(`st-n-${g.chave}`).textContent = fmtInt.format(Math.round(g.ids.reduce((s, id) => s + (vTot[id] || 0), 0)));
-    $(`st-s-${g.chave}`).innerHTML = g.excede ? '<span class="aviso">soma > 100%: ajustado</span>' : fmtPct((1 - g.f - g.l) * 100, 0);
-  }
+  const agg = agg1(ufs);
+  preencherParamsST(params, agg);
   // 1) realista
   const real = renderBlocoST('st', params, ufs, base, null);
   // 2) pessimista: parte das taxas do realista e só soma o bônus de Lula
   const bonus = Math.max(0, parseFloat($('stc-pct').value) || 0);
   const pess = aplicarBonus(params, bonus, $('stc-fonte').value);
   renderBlocoST('stc', pess, ufs, base, { br: real.br, regs: real.regs, sub: real.sub });
-  renderDistribuicao('st', params, vTot, null);
-  renderDistribuicao('stc', pess, vTot, params);
+  renderDistribuicao('st', params, agg, null);
+  renderDistribuicao('stc', pess, agg, params);
+}
+
+/** Frase "no 1º turno, neste ponto, Lula tinha X%; hoje Y% → swing". */
+const cmpLinha = (c) => (c ? `<br>Comparado com o 1º turno no mesmo ponto da apuração (estado a estado, votos convertidos para o 2º turno): Lula tinha <b>${fmtPct(c.s1)}</b>, hoje tem <b>${fmtPct(c.hoje)}</b> → swing de <b style="color:${c.swing >= 0 ? '#16a34a' : '#dc2626'}">${ppf2(c.swing)}</b>${c.extrapolado > 0.5 ? ' <span class="muted">(maioria dos votos de estados abaixo do primeiro ponto gravado no 1º turno: comparação aproximada)</span>' : ''}.` : '');
+/** Células "Lula no 1º turno neste ponto" e "swing" de uma lista de estados. */
+const cmpCels = (lista) => {
+  const c = comparar1T(lista, CAL);
+  if (!c) return '<td>—</td><td>—</td>';
+  const it = c.extrapolado > 0.5;
+  return `<td>${it ? '<i>' : ''}${fmtPct(c.s1, 1)}${it ? '</i>' : ''}</td><td style="color:${c.swing >= 0 ? '#16a34a' : '#dc2626'}">${it ? '<i>' : ''}${ppf2(c.swing)}${it ? '</i>' : ''}</td>`;
+};
+
+/** Durante o 2º turno: prévia (1º turno final + pesquisas) × estimativa com a apuração, por região e estado. */
+function renderPrevia() {
+  if (!CAL?.previa) return;
+  const params = normalizar(CAL.params);
+  preencherParamsST(params, { votos: CAL.previa.br.votos1, abstencao: CAL.previa.br.abstencao1 });
+  const br = agregar(state.estados), pv = CAL.previa.br, est = estimar(state.estados, CAL);
+  const d = est.pct[LULA] - pv.pLula;
+  const vLinha = (p) => `<b style="color:${cLula.cor}">Lula ${fmtPct(p.pLula)}</b> × <b style="color:${cFlavio.cor}">Flávio ${fmtPct(p.pFlavio)}</b>`;
+  $('pv-veredito').innerHTML = `Prévia, antes de qualquer urna: ${vLinha(pv)} <span class="muted">(${fmtInt.format(Math.round(pv.validos))} votos válidos esperados, ${fmtInt.format(Math.round(pv.novos))} de quem não votou no 1º turno)</span>.<br>
+    ${br.validos ? `Estimativa agora, com ${fmtPct(br.apuracao, 1)} apurado: ${vLinha({ pLula: est.pct[LULA], pFlavio: est.pct[FLAVIO] })} — Lula <b style="color:${d >= 0 ? '#16a34a' : '#dc2626'}">${ppf2(d)}</b> em relação à prévia.${cmpLinha(comparar1T(state.estados, CAL))}` : 'Ainda sem urnas apuradas: a estimativa é a própria prévia.'}`;
+  renderDistribuicao('pv', params, { votos: CAL.previa.br.votos1, abstencao: CAL.previa.br.abstencao1 }, null);
+
+  const linha = (nome, lista, a) => {
+    const p = previaDe(lista, CAL), e = estimar(lista, CAL), h = agregar(lista);
+    const dl = e.pct[LULA] - p.pLula, v = e.pct[LULA] > e.pct[FLAVIO] ? cLula : cFlavio, pvw = p.pLula > p.pFlavio ? cLula : cFlavio;
+    const peso = a?.tipo === 'uf' ? `<td>${fmtPct(h.validos ? pesoApuracao(lista[0]) * 100 : 0, 0)}</td>` : '';
+    return `<tr${a ? ` data-tipo="${a.tipo}" data-id="${a.id}"` : ''}><td>${nome}</td><td>${fmtPct(h.apuracao, 1)}</td>${peso}
+      <td>${fmtPct(p.pLula, 1)}</td><td>${fmtPct(p.pFlavio, 1)}</td>
+      <td>${h.validos ? fmtPct(h.pct[LULA], 1) : '—'}</td>${cmpCels(lista)}
+      <td><b>${fmtPct(e.pct[LULA], 1)}</b></td><td><b>${fmtPct(e.pct[FLAVIO], 1)}</b></td>
+      <td style="color:${dl >= 0 ? '#16a34a' : '#dc2626'}">${h.validos ? ppf2(dl) : '—'}</td>
+      <td><b style="color:${v.cor}">${v.nome}</b>${v !== pvw ? ' <span class="aviso">≠ prévia</span>' : ''}</td></tr>`;
+  };
+  const cab = (peso) => `<thead><tr><th>${peso ? 'Estado' : 'Região'}</th><th>Apurado</th>${peso ? '<th>Peso da apuração</th>' : ''}<th style="color:${cLula.cor}">Prévia Lula</th><th style="color:${cFlavio.cor}">Prévia Flávio</th>
+    <th style="color:${cLula.cor}">Lula hoje</th><th>Lula no 1º turno neste ponto</th><th>Swing vs. 1º turno</th><th style="color:${cLula.cor}">Estimativa Lula</th><th style="color:${cFlavio.cor}">Estimativa Flávio</th><th>Lula vs. prévia</th><th>Vencedor estimado</th></tr></thead>`;
+  $('pv-regioes').innerHTML = `${cab(false)}<tbody>${[['Brasil', state.estados, null], ...Object.entries(REGIOES).map(([id, r]) => [r.nome, state.estados.filter((e) => e.regiao === id), { tipo: 'regiao', id }])].map(([n, l, a]) => linha(n === 'Brasil' ? '<b>Brasil</b>' : n, l, a)).join('')}</tbody>`;
+  const estados = [...state.estados].sort((x, y) => y.eleitorado - x.eleitorado);
+  $('pv-ufs').innerHTML = `${cab(true)}<tbody>${estados.map((e) => linha(e.nome, [e], { tipo: 'uf', id: e.uf })).join('')}</tbody>`;
 }
 
 function renderProjecao() {
   const lista = doEscopo(state.escopo);
   const atual = agregar(lista);
   const simples = agregar(lista.map(projetar));
-  const cal = CAL ? projetarCalibrado(lista, CAL) : null; // 2º turno: corrigida pelos erros medidos no 1º
+  const cal = CAL ? estimar(lista, CAL) : null; // 2º turno: calibrada pelos erros medidos no 1º + prévia das pesquisas
+  const previa = previaDe(lista, CAL);
   const proj = cal ?? simples;
   const semDados = lista.filter((e) => e.apuracao === 0).length;
-  $('proj-titulo').textContent = `Projeção · ${nomeEscopo(state.escopo)} com 100% apurado${cal ? ' · calibrada pelo 1º turno' : ''}`;
+  $('proj-titulo').textContent = `${cal ? 'Estimativa' : 'Projeção'} · ${nomeEscopo(state.escopo)} com 100% apurado${cal ? ' · 1º turno + pesquisas + apuração' : ''}`;
   const ord = [...CANDIDATOS].sort((x, y) => proj.pct[y.id] - proj.pct[x.id]).slice(0, TURNO.turno === 2 ? 2 : 6);
   const l = proj.ranking[0], s2 = proj.ranking[1];
   const veredito = !proj.validos ? 'Sem votos apurados ainda.'
-    : TURNO.turno === 2 ? `<b style="color:${l.cor}">${l.nome}</b> venceria com ${fmtPct(proj.pct[l.id])} dos válidos × <b style="color:${s2.cor}">${s2.nome}</b> ${fmtPct(proj.pct[s2.id])}.`
+    : TURNO.turno === 2 ? `<b style="color:${l.cor}">${l.nome}</b> venceria com ${fmtPct(proj.pct[l.id])} dos válidos × <b style="color:${s2.cor}">${s2.nome}</b> ${fmtPct(proj.pct[s2.id])}${atual.validos ? '' : ' <span class="muted">(prévia: ainda sem urnas apuradas)'}.`
     : proj.pct[l.id] > 50 ? `<b style="color:${l.cor}">${l.nome}</b> venceria no 1º turno (${fmtPct(proj.pct[l.id])} dos válidos).`
     : `Iria a <b>2º turno</b>: <b style="color:${l.cor}">${l.nome}</b> ${fmtPct(proj.pct[l.id])} × <b style="color:${s2.cor}">${s2.nome}</b> ${fmtPct(proj.pct[s2.id])}.`;
   const sl = simples.ranking[0];
-  const nota = cal && simples.validos ? ` Sem a calibração (projeção simples): ${sl.nome} ${fmtPct(simples.pct[sl.id])}.` : '';
-  $('proj-veredito').innerHTML = `${veredito}<br><span class="muted">Hoje (${fmtPct(atual.apuracao, 1)} apurado): ${fmtPct(atual.pct[atual.ranking[0].id])} ${atual.ranking[0].nome}.${nota}${semDados ? ` ${semDados} UF(s) sem votos ainda ficaram fora.` : ''}</span>`;
+  const nota = (cal && simples.validos ? ` Projeção simples (sem calibração nem prévia): ${sl.nome} ${fmtPct(simples.pct[sl.id])}.` : '')
+    + (previa ? ` Prévia (1º turno + pesquisas): ${previa.pLula > previa.pFlavio ? `Lula ${fmtPct(previa.pLula)}` : `Flávio ${fmtPct(previa.pFlavio)}`}.` : '');
+  $('proj-veredito').innerHTML = `${veredito}<br><span class="muted">${atual.validos ? `Hoje (${fmtPct(atual.apuracao, 1)} apurado): ${fmtPct(atual.pct[atual.ranking[0].id])} ${atual.ranking[0].nome}.` : 'Sem votos apurados ainda.'}${nota}${semDados ? ` ${semDados} UF(s) sem votos ainda${previa ? ' entram só com a prévia' : ' ficaram fora'}.` : ''}</span>`;
   const pp = (d) => `${d >= 0 ? '+' : ''}${d.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} p.p.`;
-  $('proj-cands').innerHTML = `<thead><tr><th>Candidato</th><th>Hoje</th>${cal ? '<th>Projeção simples</th><th>Calibrada (1º turno)</th>' : '<th>Projetado</th>'}<th>Variação</th><th>Votos projetados</th></tr></thead><tbody>${ord.map((c) => {
+  const pvPct = (c) => (previa ? (c.id === LULA ? previa.pLula : c.id === FLAVIO ? previa.pFlavio : 0) : 0);
+  $('proj-cands').innerHTML = `<thead><tr><th>Candidato</th><th>Hoje</th>${cal ? '<th>Projeção simples</th><th>Prévia (1º turno + pesquisas)</th><th>Estimativa</th>' : '<th>Projetado</th>'}<th>Variação vs. hoje</th><th>Votos ${cal ? 'estimados' : 'projetados'}</th></tr></thead><tbody>${ord.map((c) => {
     const d = proj.pct[c.id] - atual.pct[c.id];
-    return `<tr><td><span style="color:${c.cor}">●</span> ${c.nome}</td><td>${fmtPct(atual.pct[c.id])}</td>
-      ${cal ? `<td>${fmtPct(simples.pct[c.id])}</td>` : ''}<td><b>${fmtPct(proj.pct[c.id])}</b></td><td style="color:${d >= 0 ? '#16a34a' : '#dc2626'}">${pp(d)}</td>
+    return `<tr><td><span style="color:${c.cor}">●</span> ${c.nome}</td><td>${atual.validos ? fmtPct(atual.pct[c.id]) : '—'}</td>
+      ${cal ? `<td>${simples.validos ? fmtPct(simples.pct[c.id]) : '—'}</td><td>${fmtPct(pvPct(c))}</td>` : ''}<td><b>${fmtPct(proj.pct[c.id])}</b></td><td style="color:${d >= 0 ? '#16a34a' : '#dc2626'}">${atual.validos ? pp(d) : '—'}</td>
       <td>${fmtInt.format(proj.votos[c.id])}</td></tr>`; }).join('')}</tbody>`;
   const regs = Object.entries(REGIOES).map(([id, r]) => {
     const l2 = state.estados.filter((e) => e.regiao === id);
-    return { r, a: agregar(l2), p: CAL ? projetarCalibrado(l2, CAL) : agregar(l2.map(projetar)) };
+    return { r, a: agregar(l2), p: CAL ? estimar(l2, CAL) : agregar(l2.map(projetar)) };
   });
-  $('proj-regioes').innerHTML = `<thead><tr><th>Região</th><th>Apurado</th><th>Líder hoje</th><th>Líder projetado</th><th>Eleitores</th></tr></thead><tbody>${regs.map(({ r, a, p }) => `
+  $('proj-regioes').innerHTML = `<thead><tr><th>Região</th><th>Apurado</th><th>Líder hoje</th><th>Líder ${CAL ? 'estimado' : 'projetado'}</th><th>Eleitores</th></tr></thead><tbody>${regs.map(({ r, a, p }) => `
     <tr><td>${r.nome}</td><td>${fmtPct(a.apuracao, 1)}</td>
     <td>${a.validos ? `<span style="color:${a.lider.cor}">${a.lider.nome}</span> ${fmtPct(a.pct[a.lider.id], 1)}` : '—'}</td>
     <td>${p.validos ? `<b style="color:${p.lider.cor}">${p.lider.nome}</b> ${fmtPct(p.pct[p.lider.id], 1)}` : '—'}</td>
@@ -431,12 +484,12 @@ function renderTopo() {
   $('modo').textContent = state.erro ? 'ERRO NA LEITURA' : 'AO VIVO · TSE';
   $('modo').className = `badge ${state.erro ? 'sim' : 'live'}`;
   $('atualizado').textContent = state.erro ? state.erro : state.atualizado ? `Arquivo TSE de ${state.atualizado}` : 'Carregando…';
-  $('rodape').textContent = `Fonte: resultados.tse.jus.br (${TURNO.turno}º turno 2026, Presidente).${CAL ? ' Projeção calibrada com os erros de projeção medidos no 1º turno (ver Histórico).' : ''} Atualiza a cada 30 s. Percentuais sobre votos válidos; % de apuração = seções totalizadas ÷ total de seções.`;
+  $('rodape').textContent = `Fonte: resultados.tse.jus.br (${TURNO.turno}º turno 2026, Presidente).${CAL ? ' Estimativa: prévia do 1º turno + pesquisas de transferência de voto, corrigida pelos erros de projeção medidos no 1º turno (ver Histórico).' : ''} Atualiza a cada 30 s. Percentuais sobre votos válidos; % de apuração = seções totalizadas ÷ total de seções.`;
 }
 
 function render() {
   renderTopo(); renderPlacar(); renderKpis(); renderEscopo(); renderRegioes(); renderDetalhe(); renderComparativo(); renderProjecao(); renderCenario();
-  if (TURNO.turno === 1) renderSegundoTurno(); // projeção do 2º turno a partir do 1º: só faz sentido durante o 1º
+  if (TURNO.turno === 1) renderSegundoTurno(); else renderPrevia(); // 1º turno: projeção do 2º · 2º turno: prévia × estimativa
   renderPizzas(); renderTabela(); renderFoco();
 }
 
@@ -464,14 +517,14 @@ function renderPlacar() {
     ${lado(cLula, 'dir')}`;
 }
 
-/** 2º turno: previsão do resultado final, calibrada com os erros da projeção medidos no 1º turno. */
+/** 2º turno: estimativa do resultado final (prévia do 1º turno + pesquisas, corrigida pela apuração e pelas curvas do 1º turno). */
 function projNac(br) {
-  if (!CAL || !br.validos || br.apuracao >= 99.99) return '';
-  const p = projetarCalibrado(state.estados, CAL), s = agregar(state.estados.map(projetar));
+  if (!CAL || br.apuracao >= 99.99) return '';
+  const p = estimar(state.estados, CAL), s = agregar(state.estados.map(projetar));
   const l = p.ranking[0], o = p.ranking[1];
-  return `<div class="nac-proj"><div class="nac-l">Previsão final · calibrada pelo 1º turno</div>
+  return `<div class="nac-proj"><div class="nac-l">Estimativa final · 1º turno + pesquisas + apuração</div>
     <b style="color:${l.cor}">${l.nome} ${fmtPct(p.pct[l.id], 1)}</b> × <b style="color:${o.cor}">${o.nome} ${fmtPct(p.pct[o.id], 1)}</b>
-    <small>projeção simples: ${s.ranking[0].nome} ${fmtPct(s.pct[s.ranking[0].id], 1)}</small></div>`;
+    <small>${br.validos ? `projeção simples: ${s.ranking[0].nome} ${fmtPct(s.pct[s.ranking[0].id], 1)}` : 'ainda sem urnas: é a prévia (1º turno + pesquisas)'}</small></div>`;
 }
 
 // ---------- mapa 3D por município ----------
@@ -650,7 +703,7 @@ function renderFoco() {
     const nLid = [...lid.entries()].sort((a, b) => b[1] - a[1]).map(([id, n]) => ({ c: cand[id], n }));
     const altos = munisUf.filter((m) => m.apuracao >= 90).length;
     const maiores = [...munisUf].sort((a, b) => b.eleitorado - a.eleitorado).slice(0, 8);
-    const proj = est.apuracao < 99.99 && est.validos ? (CAL ? projetarCalibrado(estUni, CAL) : agregar(estUni.map(projetar))) : null;
+    const proj = est.apuracao < 99.99 && (est.validos || CAL) ? (CAL ? estimar(estUni, CAL) : agregar(estUni.map(projetar))) : null;
     el.innerHTML = `${trilha}
       <h3>${nomeUf(uf)} <small>${nomeReg}</small></h3>
       ${l ? `<p class="flider"><b style="color:${l.cor}">${l.nome}</b> lidera com ${fmtPct(est.pct[l.id], 1)} · ${ppf(est.pct[l.id] - est.pct[seg.id]).replace('+', '')} à frente de ${seg.nome}</p>` : '<p class="flider">Sem votos apurados ainda.</p>'}
@@ -660,7 +713,7 @@ function renderFoco() {
         ${kpi('Votos válidos', fmtInt.format(est.validos))}
         ${kpi('Municípios', fmtInt.format(munisUf.length), `${fmtInt.format(altos)} com 90%+ apurado`)}
       </div>
-      ${proj ? `<p class="fproj">Projeção com 100% apurado${CAL ? ' (calibrada pelo 1º turno)' : ''}: <b style="color:${proj.lider.cor}">${proj.lider.nome} ${fmtPct(proj.pct[proj.lider.id], 1)}</b></p>` : ''}
+      ${proj ? `<p class="fproj">${CAL ? 'Estimativa final (1º turno + pesquisas + apuração)' : 'Projeção com 100% apurado'}: <b style="color:${proj.lider.cor}">${proj.lider.nome} ${fmtPct(proj.pct[proj.lider.id], 1)}</b>${CAL && est.validos && est.apuracao < APURACAO_PLENA ? ` <span class="muted">· prévia pesa ${fmtPct((1 - pesoApuracao(estUni[0])) * 100, 0)}</span>` : ''}${(() => { const c = CAL && est.validos ? comparar1T(estUni, CAL) : null; return c ? `<br><span class="muted">No 1º turno, neste ponto, Lula tinha ${fmtPct(c.s1, 1)}; hoje ${fmtPct(c.hoje, 1)} → swing ${ppf(c.swing)}</span>` : ''; })()}</p>` : ''}
       <h4>Comparação · ${nomeUf(uf)} × ${nomeReg} × Brasil</h4>
       ${comparativo([{ nome: uf, a: est }, { nome: nomeReg, a: ra }, { nome: 'Brasil', a: br }], candsDe(est))}
       ${nLid.length ? `<h4>Quem lidera nos municípios</h4>
@@ -800,7 +853,14 @@ $('btn-atualizar').addEventListener('click', atualizar);
 for (const id of ['cen-pp', 'cen-rel']) $(id).addEventListener('input', () => state.estados.length && renderCenario());
 
 $('turno-rotulo').textContent = `${TURNO.turno}º turno`;
-if (TURNO.turno === 2) $('sec-2t').hidden = true;
+$('st-turno1').hidden = TURNO.turno === 2;
+$('st-turno2').hidden = TURNO.turno !== 2;
+if (TURNO.turno === 2) {
+  $('st-titulo').textContent = 'Estimativa do 2º turno · prévia (1º turno + pesquisas) × apuração';
+  $('st-intro').innerHTML = `<b>Prévia:</b> o resultado final do 1º turno de cada estado, com os eleitores de Lula e Flávio repetindo o voto, a terceira via dividida pelas taxas abaixo e parte de quem não votou no 1º turno entrando. <b>Estimativa:</b> conforme as urnas chegam, cada estado troca a prévia pela sua apuração (corrigida pela curva de erro do 1º turno); a prévia ainda pesa enquanto o estado tem menos de ${APURACAO_PLENA}% apurado. Taxas editáveis — fontes: ${FONTES}.`;
+  $('proj-nota-2t').hidden = false;
+  if (!CAL) $('sec-2t').hidden = true;
+}
 criarCharts();
 initSegundoTurno();
 renderTopo();
