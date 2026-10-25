@@ -487,7 +487,7 @@ function renderProjecao() {
 function renderTopo() {
   $('modo').textContent = state.erro ? 'ERRO NA LEITURA' : 'AO VIVO · TSE';
   $('modo').className = `badge ${state.erro ? 'sim' : 'live'}`;
-  $('atualizado').textContent = state.erro ? state.erro : state.atualizado ? `Arquivo TSE de ${state.atualizado}` : 'Carregando…';
+  $('atualizado').textContent = state.erro ? state.erro : state.atualizado ? `TSE ${state.atualizado}` : 'Carregando…';
   $('rodape').textContent = `Fonte: resultados.tse.jus.br (${TURNO.turno}º turno 2026, Presidente).${CAL ? ' Estimativa: prévia do 1º turno + pesquisas de transferência de voto, corrigida pelos erros de projeção medidos no 1º turno (ver Histórico).' : ''} Atualiza a cada 30 s. Percentuais sobre votos válidos; % de apuração = seções totalizadas ÷ total de seções.`;
 }
 
