@@ -6,7 +6,8 @@
 //  - /api/historico, /api/snapshot?i=N, /api/historico.csv : consulta ao histórico gravado (?turno=1|2; padrão = turno atual)
 //  - /api/municipios : resultado de Presidente por município (mapa 3D), relido quando o TSE publica arquivo novo
 //  - /api/turno : turno em andamento. Muda sozinho para o 2º quando o TSE começa a totalizá-lo (ou force com TURNO=1|2)
-//  - /api/calibracao : curvas de correção da projeção aprendidas com o 1º turno encerrado (ver public/calibracao.js)
+//  - /api/calibracao : estimativa do 2º turno — prévia (1º turno + pesquisas) e curvas de correção aprendidas com o
+//    1º turno encerrado (ver public/calibracao.js). Aceita as taxas de transferência na query (?renan=49.7,26.5&novos=38,46,20)
 //  - 2º turno: grava a apuração de cada município a cada leitura em data/municipios-2t.jsonl (para replay);
 //    /api/municipios/replay lista os momentos gravados e /api/municipios/replay?i=N devolve o mapa naquele momento
 import http from 'node:http';
@@ -17,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { carregarTSE, carregarMunicipiosTSE, ESTADOS, CANDIDATOS, TURNOS } from './public/data.js';
 import { agregar, projetar } from './public/calc.js';
 import { construirCalibracao } from './public/calibracao.js';
+import { paramsDeQuery, chaveDe, paramsPadrao } from './public/transferencia.js';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const ROOT = join(HERE, 'public');
@@ -25,6 +27,7 @@ const ARQS = {
   1: { hist: join(DATA_DIR, 'historico.jsonl'), mun: join(DATA_DIR, 'municipios.json') },
   2: { hist: join(DATA_DIR, 'historico-2t.jsonl'), mun: join(DATA_DIR, 'municipios-2t.json') },
 };
+const ARQ_ELEITORADO_1T = join(DATA_DIR, 'eleitorado-1t.json'); // eleitorado, comparecimento e abstenção por UF no 1º turno
 const PORT = process.env.PORT || 3000;
 const TSE = 'https://resultados.tse.jus.br/oficial';
 const INTERVALO = 30_000;
@@ -50,20 +53,41 @@ const TURNO_FIXO = Number(process.env.TURNO) || null;
 let turno = TURNO_FIXO ?? (historicos[2].length ? 2 : 1);
 let historico = historicos[turno];
 
-const hidratar = (snap) => snap.estados.map((e) => ({ ...ESTADOS.find((x) => x.uf === e.uf), ...e }));
+// Abstenção final do 1º turno por UF (base dos "eleitores que não votaram no 1º turno" da estimativa do 2º).
+// Os snapshots antigos não a têm; vem do arquivo final de acompanhamento do TSE, guardado em data/eleitorado-1t.json.
+let eleitorado1 = {};
+try { eleitorado1 = JSON.parse(await readFile(ARQ_ELEITORADO_1T, 'utf8')).ufs; }
+catch {
+  try {
+    const e6 = TURNOS[1].padStart(6, '0');
+    const ab = await (await fetch(`${TSE}/ele2026/${TURNOS[1]}/dados/br/br-e${e6}-ab.json`, { headers: { 'user-agent': 'Mozilla/5.0 painel-eleicoes' } })).json();
+    for (const a of ab.abr) if (a.tpabr === 'uf') eleitorado1[a.cdabr.toUpperCase()] = { eleitorado: Number(a.e.te), comparecimento: Number(a.e.c), abstencao: Number(a.e.a) };
+    await writeFile(ARQ_ELEITORADO_1T, JSON.stringify({ fonte: `resultados.tse.jus.br · 1º turno 2026 · arquivo ${ab.dg} ${ab.hg}`, ufs: eleitorado1 }, null, 1));
+    console.log('Eleitorado do 1º turno lido do TSE e gravado em', ARQ_ELEITORADO_1T);
+  } catch (err) { console.error('Sem abstenção do 1º turno (eleitores novos ficam de fora da prévia):', err.message); }
+}
+const hidratar = (snap) => snap.estados.map((e) => ({ ...ESTADOS.find((x) => x.uf === e.uf), abstencao1: eleitorado1[e.uf]?.abstencao, ...e }));
 const resumo = (snap, i) => {
   const est = hidratar(snap);
   const a = agregar(est), p = agregar(est.map(projetar));
   return { i, t: snap.t, tse: snap.tse, apuracao: a.apuracao, validos: a.validos, atual: a.pct, proj: p.pct };
 };
 
-// ---------- calibração (aprendida com o 1º turno já encerrado) ----------
-let calibracao = null;
-function montarCalibracao() {
+// ---------- estimativa do 2º turno (calibração aprendida com o 1º turno já encerrado + prévia das pesquisas) ----------
+let calibracao = null;            // com as taxas padrão
+const calibracoes = new Map();    // por conjunto de taxas (chaveDe → resultado), para as taxas editadas no painel
+let snaps1 = null;                // snapshots do 1º turno hidratados (cache)
+function montarCalibracao(params = paramsPadrao()) {
   const h = historicos[1];
-  if (!h.length || h.at(-1).apuracao < 99.99) return; // só com o resultado final do 1º turno
-  calibracao = construirCalibracao(h.map(hidratar));
-  console.log(`Calibração: ${Object.keys(calibracao.ufs).length} estados, a partir de ${h.length} snapshots do 1º turno`);
+  if (!h.length || h.at(-1).apuracao < 99.99) return null; // só com o resultado final do 1º turno
+  const k = chaveDe(params);
+  if (calibracoes.has(k)) return calibracoes.get(k);
+  snaps1 ??= h.map(hidratar);
+  const cal = construirCalibracao(snaps1, params);
+  if (calibracoes.size > 50) calibracoes.clear();
+  calibracoes.set(k, cal);
+  if (!calibracao) { calibracao = cal; console.log(`Calibração: ${Object.keys(cal.ufs).length} estados, a partir de ${h.length} snapshots do 1º turno · prévia Brasil: Lula ${cal.previa.br.pLula.toFixed(2)}% × Flávio ${cal.previa.br.pFlavio.toFixed(2)}%`); }
+  return cal;
 }
 montarCalibracao();
 
@@ -94,11 +118,11 @@ async function gravar() {
     if (ultimo && apuracao < ultimo.apuracao) { console.log(`ignorado: ${apuracao.toFixed(2)}% < ${ultimo.apuracao.toFixed(2)}% (arquivo TSE ${r.atualizadoTSE})`); return; }
     const snap = {
       t: new Date().toISOString(), tse: r.atualizadoTSE, apuracao,
-      estados: r.estados.map(({ uf, eleitorado, eleitoradoApurado, secoes, apuracao, votos }) => ({ uf, eleitorado, eleitoradoApurado, secoes, apuracao, votos })),
+      estados: r.estados.map(({ uf, eleitorado, eleitoradoApurado, comparecimento, abstencao, secoes, apuracao, votos }) => ({ uf, eleitorado, eleitoradoApurado, comparecimento, abstencao, secoes, apuracao, votos })),
     };
     historico.push(snap);
     await appendFile(ARQS[t].hist, JSON.stringify(snap) + '\n');
-    if (t === 1 && snap.apuracao >= 99.99 && !calibracao) montarCalibracao();
+    if (t === 1 && snap.apuracao >= 99.99 && !calibracao) { snaps1 = null; montarCalibracao(); }
     console.log(`#${historico.length - 1} gravado · TSE ${snap.tse} · ${snap.apuracao.toFixed(2)}% apurado`);
     atualizarMunicipios(); // arquivo novo no TSE: relê os municípios (só baixa os que mudaram)
   } catch (err) {
@@ -225,7 +249,10 @@ http.createServer(async (req, res) => {
     const tq = Number(url.searchParams.get('turno'));
     const historico = historicos[tq === 1 || tq === 2 ? tq : turno];
     if (url.pathname === '/api/turno') return json(res, { turno, eleicao: TURNOS[turno], calibracao: !!calibracao });
-    if (url.pathname === '/api/calibracao') return calibracao ? json(res, calibracao) : json(res, { erro: 'calibração indisponível (1º turno sem resultado final gravado)' }, 404);
+    if (url.pathname === '/api/calibracao') {
+      const cal = calibracao && montarCalibracao(paramsDeQuery(url.searchParams));
+      return cal ? json(res, cal) : json(res, { erro: 'calibração indisponível (1º turno sem resultado final gravado)' }, 404);
+    }
     if (url.pathname === '/api/historico') {
       const n = historico.length;
       return json(res, { turno: historico === historicos[1] ? 1 : 2, total: n, ultimo: n ? resumo(historico[n - 1], n - 1) : null, percentis: percentis(historico) });

@@ -26,13 +26,12 @@ Os dados vêm da API pública de resultados do TSE (`resultados.tse.jus.br`). **
 - Leva cada estado a 100% do seu eleitorado, mantendo os percentuais atuais dele, e recalcula o total pelo peso de cada estado.
 - **Situação garantida matematicamente:** avisa quando alguém já está eleito ou quando o 2º turno já é certo, mesmo que todos os votos restantes fossem para o outro lado.
 - **Cenários editáveis:** "e se Lula melhorar X nos votos que faltam?", por região.
-- **Projeção do 2º turno a partir do 1º:** distribui os eleitores da terceira via pelas taxas de transferência de uma pesquisa (editáveis), com um cenário realista e um pessimista, por região e por estado.
+- **Projeção do 2º turno a partir do 1º:** distribui os eleitores da terceira via e os que não votaram pelas taxas de transferência das pesquisas (editáveis), com um cenário realista e um pessimista, por região e por estado.
 
-### 🎯 Previsão calibrada para o 2º turno
-- O servidor gravou o 1º turno inteiro. Agora que o resultado final é conhecido, dá para medir **quanto a projeção errou em cada momento**.
-- A projeção simples subestimou Lula do começo ao fim (−1,6 p.p. com 29% apurado), porque as últimas urnas de cada estado tendiam a favorecê-lo.
-- Com isso, cada estado ganha uma **curva de correção** (quanto o resultado ainda mudou a partir de cada % de apuração), que é aplicada à projeção do 2º turno.
-- O painel mostra a projeção simples e a calibrada lado a lado.
+### 🎯 Estimativa do 2º turno · prévia + calibração
+- **Prévia (antes de qualquer urna):** o resultado final do 1º turno de cada estado passa por um modelo de transferência de votos (`public/transferencia.js`): Lula e Flávio repetem o voto, a terceira via se divide pelas taxas médias das pesquisas de 2º turno (Renan, Caiado, Cury, Zema e demais) e parte de quem não votou no 1º turno entra votando (sobre a abstenção real de cada estado, `data/eleitorado-1t.json`). Taxas editáveis no painel.
+- **Curva de correção por estado:** o servidor gravou o 1º turno inteiro, então dá para medir **quanto a projeção errou em cada momento**. A projeção simples subestimou Lula do começo ao fim (−1,7 p.p. com 29% apurado), porque as últimas urnas de cada estado tendiam a favorecê-lo. A curva é medida sobre os votos já convertidos para o 2º turno, para não misturar o efeito da terceira via.
+- **Estimativa ao vivo:** cada estado tem a apuração corrigida pela sua curva e projetada a 100%; estado sem urna usa a prévia, e abaixo de 20% apurado a prévia ainda pesa (média ponderada pela apuração). O painel mostra projeção simples, prévia e estimativa lado a lado, e por estado quanto a apuração está indo melhor ou pior para cada um do que a prévia esperava.
 
 ### 🕘 Histórico e replay
 - Um snapshot do resultado a cada 30 s, gravado pelo servidor mesmo com o navegador fechado.
@@ -93,7 +92,8 @@ public/
   mapa3d.js          mapa 3D municipal (three.js): extrusão, iluminação, câmera, foco e destaque
   data.js            leitura da API do TSE (estados e municípios, 1º e 2º turno)
   calc.js            cálculos puros: agregação, projeção, situação garantida
-  calibracao.js      curvas de correção aprendidas com o 1º turno
+  transferencia.js   taxas de transferência de voto 1º → 2º turno (pesquisas) e conversão de votos
+  calibracao.js      estimativa do 2º turno: prévia + curvas de correção aprendidas com o 1º turno
   historico.*        página de histórico
   gov-pe.*           página de Governador de PE
   geo/municipios.json  malha municipal do IBGE, compactada
@@ -112,7 +112,7 @@ data/                  gravações (histórico, caches e replay municipal)
 | `/api/municipios` | resultado atual por município |
 | `/api/municipios/replay` | momentos gravados por município (2º turno) |
 | `/api/municipios/replay?i=N` | mapa municipal naquele momento |
-| `/api/calibracao` | curvas de correção do 1º turno |
+| `/api/calibracao` | estimativa do 2º turno: prévia por estado e curvas de correção do 1º turno. Aceita as taxas na query (`?renan=49.7,26.5&novos=38.07,46.23,20`) |
 | `/tse/*` | proxy para `resultados.tse.jus.br/oficial` (cache de 15 s) |
 
 **Cuidado com o TSE:** a API pública limita requisições (HTTP 429). O servidor relê os municípios só quando o TSE publica um arquivo novo, e só baixa os municípios que mudaram.

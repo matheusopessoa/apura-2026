@@ -73,7 +73,7 @@
         <div class="tabela-wrap"><table id="proj-cands"></table></div>
         <div class="tabela-wrap"><table id="proj-regioes"></table></div>
       </div>
-      <p class="muted">Estimativa: cada estado é levado a 100% do seu eleitorado (votos válidos por eleitor nas urnas já apuradas × eleitorado total do estado), mantendo os percentuais atuais dele, e os totais são recalculados pelo peso de cada estado. Não é previsão oficial — as urnas costumam chegar em ordem enviesada (ex.: interior antes das capitais), então o resultado pode mudar bastante, sobretudo com pouca apuração.</p>
+      <p class="muted">Estimativa: cada estado é levado a 100% do seu eleitorado (votos válidos por eleitor nas urnas já apuradas × eleitorado total do estado), mantendo os percentuais atuais dele, e os totais são recalculados pelo peso de cada estado. Não é previsão oficial — as urnas costumam chegar em ordem enviesada (ex.: interior antes das capitais), então o resultado pode mudar bastante, sobretudo com pouca apuração. <span id="proj-nota-2t" hidden><b>2º turno:</b> a estimativa corrige cada estado pela curva de erro medida no 1º turno e, enquanto o estado tem pouca apuração, mistura a apuração com a prévia (resultado do 1º turno + transferência de votos das pesquisas — taxas editáveis mais abaixo). Estados sem urna apurada entram só com a prévia.</span></p>
     </section>
 
     <section class="card">
@@ -90,9 +90,11 @@
     </section>
 
     <section class="card" id="sec-2t">
-      <h2>Projeção do 2º turno · Lula × Flávio Bolsonaro</h2>
-      <p class="muted">Eleitores de Lula e Flávio repetem o voto. Os da terceira via se dividem conforme as taxas abaixo (Quaest, 03/10/2026 — editáveis); o que sobra vai para branco, nulo ou indeciso.</p>
+      <h2 id="st-titulo">Projeção do 2º turno · Lula × Flávio Bolsonaro</h2>
+      <p class="muted" id="st-intro">Eleitores de Lula e Flávio repetem o voto. Os da terceira via se dividem conforme as taxas abaixo (média das pesquisas de 2º turno, out/2026 — editáveis); parte de quem não votou no 1º turno entra votando; o que sobra vai para branco, nulo ou indeciso.</p>
       <div class="tabela-wrap"><table id="st-params"></table></div>
+
+      <div id="st-turno1">
       <label class="st-base">Base do 1º turno:
         <select id="st-base"><option value="proj">Projeção com 100% apurado</option><option value="hoje">Apurado até agora</option></select>
       </label>
@@ -129,7 +131,22 @@
       <h4 class="h4">Por estado</h4>
       <div class="tabela-wrap" style="max-height: 420px; overflow-y: auto"><table id="stc-ufs"></table></div>
       </div>
-      <p class="muted">Cada região/estado usa o seu próprio 1º turno (do Brasil inteiro, na soma). Não considera diferença de abstenção entre turnos nem mudança de voto de eleitores de Lula/Flávio. Percentuais sobre votos válidos (Lula + Flávio). “Demais candidatos” (Zema e nanicos) começam em 0%/0% por falta de dado — ajuste se quiser.</p>
+      <p class="muted">Cada região/estado usa o seu próprio 1º turno (do Brasil inteiro, na soma). Quem não votou no 1º turno sai da abstenção de cada estado. Não considera mudança de voto de eleitores de Lula/Flávio. Percentuais sobre votos válidos (Lula + Flávio).</p>
+      </div>
+
+      <div id="st-turno2" hidden>
+      <div class="cenario-bloco">
+        <h3 class="h3">🎯 Prévia × estimativa <span class="muted">· Brasil</span></h3>
+        <p id="pv-veredito" class="veredito"></p>
+        <h4 class="h4">Para onde vão os eleitores do 1º turno (resultado final do 1º turno, Brasil)</h4>
+        <div class="tabela-wrap"><table id="pv-dist"></table></div>
+        <h4 class="h4">Por região <span class="muted">· clique para selecionar</span></h4>
+        <div class="tabela-wrap"><table id="pv-regioes"></table></div>
+        <h4 class="h4">Por estado <span class="muted">· "Lula no 1º turno neste ponto" = o que Lula tinha no 1º turno quando o estado estava com o mesmo % apurado (votos convertidos para o 2º turno); "swing" = hoje − isso. Em <i>itálico</i>: abaixo do primeiro ponto gravado no 1º turno, comparação aproximada</span></h4>
+        <div class="tabela-wrap" style="max-height: 520px; overflow-y: auto"><table id="pv-ufs"></table></div>
+      </div>
+      <p class="muted">Peso da apuração = quanto a apuração do estado (corrigida pela curva do 1º turno) pesa na estimativa dele; o resto é a prévia. Estado sem urna apurada = 100% prévia. Percentuais sobre votos válidos (Lula + Flávio). A prévia supõe que os eleitores de Lula e Flávio repetem o voto e que a abstenção extra do 2º turno é uniforme entre os candidatos.</p>
+      </div>
     </section>
 
     <section class="card">
