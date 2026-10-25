@@ -797,6 +797,11 @@ async function atualizarMunicipios() {
   try {
     const j = await (await fetch(`/api/municipios?turno=${TURNO.turno}`, { cache: 'no-store' })).json();
     const st = $('mapa-status');
+    if (j.erro || !j.municipios) { // turno ainda não gravado (ex.: ?turno=2 antes de o TSE começar a totalizar)
+      st.textContent = `Mapa do ${TURNO.turno}º turno ainda sem dados — a apuração não começou.`;
+      setTimeout(atualizarMunicipios, 30000);
+      return;
+    }
     if (!j.municipios.length) {
       st.textContent = j.progresso ? `Lendo municípios no TSE… ${fmtInt.format(j.progresso.feitos)} de ${fmtInt.format(j.progresso.total)}` : 'Lendo municípios no TSE…';
       setTimeout(atualizarMunicipios, 3000);
