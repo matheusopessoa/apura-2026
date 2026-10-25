@@ -1,4 +1,4 @@
-import { CANDIDATOS, REGIOES, ESTADOS, carregarTSE } from './data.js';
+import { CANDIDATOS, REGIOES, ESTADOS, TURNOS, carregarTSE } from './data.js';
 import { agregar, projetar, fmtInt, fmtPct, situacao as calcSituacao, alertaResultado } from './calc.js';
 import { estimar, previaDe, pesoApuracao, comparar1T, APURACAO_PLENA, LULA, FLAVIO } from './calibracao.js';
 import { GRUPOS, NOVOS, FONTES, normalizar, queryDeParams, votosSegundoTurno } from './transferencia.js';
@@ -8,8 +8,12 @@ const $ = (id) => document.getElementById(id);
 const fmtMi = (v) => (v >= 1e6 ? `${(v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} mi` : fmtInt.format(v));
 const cand = Object.fromEntries(CANDIDATOS.map((c) => [c.id, c]));
 
-// turno em andamento (o servidor troca sozinho para o 2º quando o TSE começa a totalizá-lo)
+// turno em andamento (o servidor troca sozinho para o 2º quando o TSE começa a totalizá-lo).
+// ?turno=1|2 na URL fixa o turno mostrado: assim o 1º turno continua acessível durante o 2º (e vice-versa).
+const TURNO_URL = Number(new URLSearchParams(location.search).get('turno'));
 const TURNO = await fetch('/api/turno', { cache: 'no-store' }).then((r) => r.json()).catch(() => ({ turno: 1, eleicao: '6257' }));
+TURNO.atual = TURNO.turno; // o que o servidor está gravando agora
+if (TURNO_URL === 1 || TURNO_URL === 2) { TURNO.turno = TURNO_URL; TURNO.eleicao = TURNOS[TURNO_URL]; TURNO.fixo = true; }
 // estimativa do 2º turno: prévia (1º turno + pesquisas) e curvas aprendidas com o 1º turno encerrado (calibracao.js)
 let CAL = TURNO.turno === 2 ? await fetch('/api/calibracao').then((r) => (r.ok ? r.json() : null)).catch(() => null) : null;
 
@@ -791,7 +795,7 @@ async function iniciarMapa() {
 
 async function atualizarMunicipios() {
   try {
-    const j = await (await fetch('/api/municipios', { cache: 'no-store' })).json();
+    const j = await (await fetch(`/api/municipios?turno=${TURNO.turno}`, { cache: 'no-store' })).json();
     const st = $('mapa-status');
     if (!j.municipios.length) {
       st.textContent = j.progresso ? `Lendo municípios no TSE… ${fmtInt.format(j.progresso.feitos)} de ${fmtInt.format(j.progresso.total)}` : 'Lendo municípios no TSE…';
@@ -820,7 +824,7 @@ async function atualizarMunicipios() {
 async function atualizar() {
   try {
     const t = await fetch('/api/turno', { cache: 'no-store' }).then((x) => x.json()).catch(() => TURNO);
-    if (t.turno !== TURNO.turno) { location.reload(); return; } // começou o 2º turno
+    if (t.turno !== TURNO.atual) { if (TURNO.fixo) TURNO.atual = t.turno; else { location.reload(); return; } } // começou o 2º turno (com ?turno= fixo, só anota)
     const r = await carregarTSE('/tse', TURNO.eleicao);
     state.estados = r.estados;
     state.atualizado = r.atualizadoTSE;
@@ -853,6 +857,8 @@ $('btn-atualizar').addEventListener('click', atualizar);
 for (const id of ['cen-pp', 'cen-rel']) $(id).addEventListener('input', () => state.estados.length && renderCenario());
 
 $('turno-rotulo').textContent = `${TURNO.turno}º turno`;
+$('turnos').innerHTML = [1, 2].map((t) => `<a href="?turno=${t}" ${TURNO.turno === t ? 'aria-current="page"' : ''}>${t}º turno</a>`).join('');
+document.querySelector('.paginas a[href="/historico.html"]').href = `/historico.html?turno=${TURNO.turno}`;
 $('st-turno1').hidden = TURNO.turno === 2;
 $('st-turno2').hidden = TURNO.turno !== 2;
 if (TURNO.turno === 2) {

@@ -158,6 +158,9 @@ body.central {
 .marca b { display: block; font-size: 1.45rem; letter-spacing: .14em; text-transform: uppercase; line-height: 1.05; }
 .marca small { display: block; color: var(--muted); letter-spacing: .22em; text-transform: uppercase; font-size: .68rem; }
 .cab .paginas { margin: 0; justify-self: center; }
+.paginas .turnos { display: inline-flex; gap: 6px; margin-left: 6px; padding-left: 14px; border-left: 1px solid var(--borda); }
+.paginas .turnos a { color: var(--muted); font-size: .76rem; padding: 3px 9px; border: 1px solid var(--borda); border-radius: 999px; white-space: nowrap; }
+.paginas .turnos a[aria-current] { color: #fff; background: #2563eb; border-color: #2563eb; font-weight: 600; }
 .cab #atualizado { max-width: 260px; font-size: .75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ano { display: flex; align-items: center; gap: 10px; letter-spacing: .2em; text-transform: uppercase; font-size: .95rem; color: var(--muted); }
 .ano b { font-size: 1.9rem; letter-spacing: .12em; color: #c7d4f5; font-weight: 500; }

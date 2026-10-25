@@ -102,6 +102,7 @@ async function verificarSegundoTurno() {
     if (!(ab.abr ?? []).some((a) => Number(a.s?.st) > 0)) return;
     console.log('2º turno em totalização no TSE: trocando para o 2º turno');
     turno = 2; historico = historicos[2];
+    delete munOutros[1]; delete munOutros[2];
     trocarMunicipios();
   } catch { /* tenta de novo no próximo ciclo */ }
 }
@@ -146,13 +147,21 @@ await lerCacheMunicipios();
 async function trocarMunicipios() { await lerCacheMunicipios(); atualizarMunicipios(); }
 
 const IDS = CANDIDATOS.map((c) => c.id);
-function respostaMunicipios() { // compacto: votos como array na ordem de CANDIDATOS
+function respostaMunicipios(m = mun) { // compacto: votos como array na ordem de CANDIDATOS
   const body = JSON.stringify({
-    tse: mun.tse, lidoEm: mun.lidoEm, carregando: mun.carregando, progresso: mun.progresso, candidatos: IDS,
-    municipios: mun.lista.map(({ cd, uf, ibge, nome, capital, eleitorado, eleitoradoApurado, secoes, votos }) =>
+    tse: m.tse, lidoEm: m.lidoEm, carregando: m.carregando, progresso: m.progresso, candidatos: IDS,
+    municipios: m.lista.map(({ cd, uf, ibge, nome, capital, eleitorado, eleitoradoApurado, secoes, votos }) =>
       [cd, uf, ibge, nome, capital ? 1 : 0, eleitorado, eleitoradoApurado, secoes.total, secoes.apuradas, IDS.map((id) => votos[id] || 0)]),
   });
   return { body: Buffer.from(body), gz: gzipSync(body) };
+}
+// Municípios de um turno que NÃO é o atual (ex.: rever o 1º turno durante o 2º): cache em disco, lido uma vez.
+const munOutros = {};
+async function municipiosDoTurno(t) {
+  if (munOutros[t] !== undefined) return munOutros[t];
+  try { const s = JSON.parse(await readFile(ARQS[t].mun, 'utf8')); munOutros[t] = respostaMunicipios({ ...s, carregando: false, progresso: null }); }
+  catch { munOutros[t] = null; }
+  return munOutros[t];
 }
 
 // ---------- gravação por município (replay do 2º turno) ----------
@@ -272,6 +281,13 @@ http.createServer(async (req, res) => {
       return res.end(gz ? gzipSync(body) : body);
     }
     if (url.pathname === '/api/municipios') {
+      if ((tq === 1 || tq === 2) && tq !== turno) { // outro turno: serve o cache gravado em disco daquele turno
+        const r = await municipiosDoTurno(tq);
+        if (!r) return json(res, { erro: `sem municípios gravados do ${tq}º turno` }, 404);
+        const gz = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...(gz && { 'content-encoding': 'gzip' }) });
+        return res.end(gz ? r.gz : r.body);
+      }
       mun.json ??= respostaMunicipios();
       const gz = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...(gz && { 'content-encoding': 'gzip' }) });
